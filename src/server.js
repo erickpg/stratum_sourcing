@@ -8,7 +8,7 @@ const http = require('http');
 const { spawn } = require('child_process');
 
 const PORT = process.env.PORT || 8080;
-const INTERNAL_PORT = process.env.INTERNAL_GATEWAY_PORT || 18789;
+const INTERNAL_PORT = process.env.OPENCLAW_INTERNAL_PORT || 9080;
 
 let gatewayProcess = null;
 let gatewayReady = false;

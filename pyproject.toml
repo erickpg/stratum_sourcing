@@ -26,6 +26,7 @@ dependencies = [
     "notion-client>=2.2.0",
     # LLM
     "anthropic>=0.40.0",
+    "websockets>=13.0",
     # Config
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",

@@ -58,6 +58,14 @@ FASTAPI_PID=$!
 # Start OpenClaw gateway if configured
 if [ -f "src/server.js" ] && [ -n "${OPENCLAW_STATE_DIR:-}" ]; then
     echo "--- Starting OpenClaw gateway (port 8080) ---"
+
+    # If OAuth minter is configured, authenticate OpenClaw with Codex
+    if [ -n "${OAUTH_MINTER_URL:-}" ] && [ -n "${OAUTH_MINTER_KEY:-}" ]; then
+        echo "--- Configuring OpenClaw Codex OAuth via minter ---"
+        # OpenClaw reads auth profiles from its state dir
+        export OPENCLAW_CODEX_PROVIDER="${OPENCLAW_CODEX_PROVIDER:-openai-codex}"
+    fi
+
     cd src && node server.js &
     OPENCLAW_PID=$!
     cd ..

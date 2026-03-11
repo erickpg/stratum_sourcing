@@ -33,11 +33,19 @@ class Settings(BaseSettings):
     notion_api_key: str = Field(default="", alias="NOTION_API_KEY")
     notion_ocean_database_id: str = Field(default="", alias="NOTION_OCEAN_DATABASE_ID")
 
-    # --- LLM (OpenAI API via OAuth minter) ---
+    # --- LLM ---
+    # Option 1 (production): OpenClaw gateway with Codex OAuth
+    openclaw_gateway_url: str = Field(default="", alias="OPENCLAW_GATEWAY_URL")
+    openclaw_gateway_token: str = Field(default="", alias="OPENCLAW_GATEWAY_TOKEN")
+    openclaw_internal_port: int = Field(default=9080, alias="OPENCLAW_INTERNAL_PORT")
+    # Option 2 (fallback): Direct Anthropic API
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
+    # Option 3 (fallback): Direct OpenAI API key
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    # OAuth minter (used by OpenClaw for Codex auth on Railway)
     oauth_minter_url: str = Field(default="", alias="OAUTH_MINTER_URL")
     oauth_minter_key: str = Field(default="", alias="OAUTH_MINTER_KEY")
-    llm_model: str = Field(default="gpt-4o", alias="LLM_MODEL")
+    llm_model: str = Field(default="gpt-5.4", alias="LLM_MODEL")
     embedding_model: str = Field(default="text-embedding-3-small", alias="EMBEDDING_MODEL")
 
     # --- Cron / Security ---
@@ -52,11 +60,11 @@ class Settings(BaseSettings):
     browser_rate_limit_seconds: float = Field(default=10.0, alias="BROWSER_RATE_LIMIT_SECONDS")
 
     # --- Scoring weights ---
-    score_weight_vertical: float = Field(default=0.35)
-    score_weight_geographic: float = Field(default=0.25)
-    score_weight_stage: float = Field(default=0.20)
-    score_weight_recency: float = Field(default=0.10)
-    score_weight_authority: float = Field(default=0.10)
+    score_weight_vertical: float = Field(default=0.40)
+    score_weight_geographic: float = Field(default=0.15)
+    score_weight_stage: float = Field(default=0.15)
+    score_weight_recency: float = Field(default=0.15)
+    score_weight_authority: float = Field(default=0.15)
 
 
 settings = Settings()

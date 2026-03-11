@@ -27,6 +27,7 @@ class RawFinding(BaseModel):
     title: str
     summary: str
     category: str = "opinion"
+    relevance_score: float | None = None
     vertical_tags: list[str] = []
     evidence: list[EvidenceItem] = []
     entities: list[str] = []
@@ -47,9 +48,19 @@ The fund's four verticals:
 The fund targets Seed/Series A European companies building regulated tokenised market infrastructure.
 
 Always respond with valid JSON: {"findings": [...]}.
-Each finding has: title (max 100 chars), summary (2-3 sentences on why this matters for Stratum), \
-category, vertical_tags, evidence (url + excerpt), entities (company/org names).
-Categories: funding_round, product_launch, partnership, regulatory, hiring, research, market_move, opinion.
+Each finding has:
+- title (max 100 chars)
+- summary (2-3 sentences on why this matters for Stratum)
+- category: funding_round, product_launch, partnership, regulatory, hiring, research, market_move, opinion
+- relevance_score: 0.0-1.0 float rating how relevant this is to Stratum's thesis. Use this scale:
+  0.9-1.0: Direct hit (EU Seed/A startup in our verticals, or major regulatory shift like MiCA)
+  0.7-0.9: Strong signal (funding in adjacent infra, key partnership, regulatory consultation)
+  0.5-0.7: Relevant context (institutional adoption signal, market structure shift, thought leadership)
+  0.3-0.5: Weak signal (tangentially related, US-only, late-stage)
+  0.0-0.3: Noise (not relevant enough to surface)
+- vertical_tags: one or more of [identity_permissioning, wallets_key_management, compliance_trust, data_oracles_middleware]
+- evidence: [{url, excerpt}] with source URL and supporting quote
+- entities: company/org names mentioned
 If nothing noteworthy, return {"findings": []}."""
 
 
@@ -267,6 +278,9 @@ async def analyze_diff(
         validated = []
         for f in findings_raw:
             try:
+                # LLM sometimes returns evidence as a single dict instead of a list
+                if isinstance(f.get("evidence"), dict):
+                    f["evidence"] = [f["evidence"]]
                 finding = RawFinding.model_validate(f)
                 validated.append(finding.model_dump())
             except Exception as e:

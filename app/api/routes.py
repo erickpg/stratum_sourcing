@@ -84,12 +84,19 @@ async def search_findings(
     db: AsyncSession = Depends(get_session),
 ):
     """Search findings by text (used by Lexie Q&A)."""
+    from sqlalchemy import and_
+
+    # Split query into words so "JPMorgan tokenized" matches findings containing both
+    words = q.strip().split()
+    word_filters = [
+        Finding.title.ilike(f"%{w}%") | Finding.summary.ilike(f"%{w}%")
+        for w in words
+        if w
+    ]
     stmt = (
         select(Finding)
         .options(selectinload(Finding.evidence_items))
-        .where(
-            Finding.title.ilike(f"%{q}%") | Finding.summary.ilike(f"%{q}%")
-        )
+        .where(and_(*word_filters) if word_filters else Finding.id > 0)
         .order_by(Finding.relevance_score.desc())
         .limit(limit)
     )

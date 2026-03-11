@@ -63,47 +63,62 @@ SOURCE_AUTHORITY: dict[str, float] = {
 def score_finding(raw_finding: dict, source: Source) -> dict:
     """Score a raw finding for relevance to Stratum's thesis.
 
+    Uses LLM-provided relevance_score when available (primary),
+    falls back to keyword-based scoring (secondary).
     Adds relevance_score and dedup_hash to the finding dict.
     """
     title = raw_finding.get("title", "")
     summary = raw_finding.get("summary", "")
     text = f"{title} {summary}".lower()
 
-    # 1. Vertical alignment (0.0 - 1.0)
+    # --- Auto-tag verticals (always runs, regardless of scoring method) ---
     vertical_scores = {}
     for vertical, keywords in VERTICAL_KEYWORDS.items():
         hits = sum(1 for kw in keywords if kw.lower() in text)
-        vertical_scores[vertical] = min(hits / 3, 1.0)  # Cap at 1.0
+        vertical_scores[vertical] = min(hits / 3, 1.0)
 
-    vertical_alignment = max(vertical_scores.values()) if vertical_scores else 0.0
-
-    # Auto-tag verticals
     auto_tags = [v for v, s in vertical_scores.items() if s >= 0.3]
     existing_tags = raw_finding.get("vertical_tags", [])
     all_tags = list(set(existing_tags + auto_tags))
 
-    # 2. Geographic relevance (0.0 - 1.0)
-    geo_hits = sum(1 for kw in EUROPE_KEYWORDS if kw.lower() in text)
-    geographic_relevance = min(geo_hits / 2, 1.0)
+    # --- Score: prefer LLM score, fallback to keyword ---
+    llm_score = raw_finding.get("relevance_score")
 
-    # 3. Stage fit (0.0 - 1.0)
-    stage_hits = sum(1 for kw in EARLY_STAGE_KEYWORDS if kw.lower() in text)
-    stage_fit = min(stage_hits / 2, 1.0)
+    if llm_score is not None and isinstance(llm_score, (int, float)):
+        # LLM scored it — use directly, with light source authority adjustment
+        authority = SOURCE_AUTHORITY.get(source.category, 0.5)
+        # Blend: 85% LLM judgment + 15% source authority
+        relevance_score = 0.85 * float(llm_score) + 0.15 * authority
+    else:
+        # Fallback: keyword-based scoring
+        vertical_alignment = max(vertical_scores.values()) if vertical_scores else 0.0
 
-    # 4. Recency (always 1.0 for fresh findings -- decay applied later in queries)
-    recency = 1.0
+        geo_hits = sum(1 for kw in EUROPE_KEYWORDS if kw.lower() in text)
+        geographic_relevance = min(geo_hits / 2, 1.0)
 
-    # 5. Source authority
-    authority = SOURCE_AUTHORITY.get(source.category, 0.5)
+        stage_hits = sum(1 for kw in EARLY_STAGE_KEYWORDS if kw.lower() in text)
+        stage_fit = min(stage_hits / 2, 1.0)
 
-    # Weighted composite score
-    relevance_score = (
-        settings.score_weight_vertical * vertical_alignment
-        + settings.score_weight_geographic * geographic_relevance
-        + settings.score_weight_stage * stage_fit
-        + settings.score_weight_recency * recency
-        + settings.score_weight_authority * authority
-    )
+        recency = 1.0
+        authority = SOURCE_AUTHORITY.get(source.category, 0.5)
+
+        CATEGORY_BONUS = {
+            "regulatory": 0.15,
+            "funding_round": 0.15,
+            "product_launch": 0.10,
+            "partnership": 0.05,
+            "research": 0.05,
+        }
+        category_bonus = CATEGORY_BONUS.get(raw_finding.get("category", ""), 0.0)
+
+        relevance_score = (
+            settings.score_weight_vertical * vertical_alignment
+            + settings.score_weight_geographic * geographic_relevance
+            + settings.score_weight_stage * stage_fit
+            + settings.score_weight_recency * recency
+            + settings.score_weight_authority * authority
+            + category_bonus
+        )
 
     # Clamp to [0, 1]
     relevance_score = max(0.0, min(1.0, relevance_score))

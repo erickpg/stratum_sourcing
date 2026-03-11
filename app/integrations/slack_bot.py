@@ -178,19 +178,24 @@ async def send_morning_digest() -> bool:
 
         top_findings = findings[:5]
 
-        # Extract top entities mentioned
-        all_entities: list[str] = []
-        for f in findings:
-            # Simple entity extraction from title + summary
-            for word in f.title.split():
-                if word[0:1].isupper() and len(word) > 2 and word.isalpha():
-                    all_entities.append(word)
-
-        # Count and get top 10 unique
+        # Collect vertical tags across all findings as radar topics
         from collections import Counter
 
-        entity_counts = Counter(all_entities)
-        top_entities = [name for name, _ in entity_counts.most_common(10)]
+        # Canonical vertical names
+        TAG_CANONICAL = {
+            "identity_permissioning": "Identity & Permissioning",
+            "wallets_key_management": "Wallets & Key Management",
+            "compliance_trust": "Compliance & Trust Infrastructure",
+            "data_oracles_middleware": "Data, Oracles & Middleware",
+        }
+        tag_counts: Counter[str] = Counter()
+        for f in findings:
+            if f.vertical_tags:
+                for tag in f.vertical_tags:
+                    key = tag.lower().replace(" ", "_").replace(",", "").replace("&", "")
+                    canonical = TAG_CANONICAL.get(key, tag)
+                    tag_counts[canonical] += 1
+        top_entities = [t for t, _ in tag_counts.most_common(6)]
 
         # Build Slack Block Kit message
         blocks = _build_digest_blocks(top_findings, top_entities)
@@ -248,12 +253,33 @@ def _build_digest_blocks(findings: list[Finding], entities: list[str]) -> list[d
         },
     ]
 
+    SCORE_EMOJIS = {5: "🔴", 4: "🟠", 3: "🟡", 2: "🔵", 1: "⚪"}
+    CATEGORY_LABELS = {
+        "funding_round": "💰 Funding",
+        "product_launch": "🚀 Launch",
+        "partnership": "🤝 Partnership",
+        "regulatory": "⚖️ Regulatory",
+        "hiring": "👤 Hiring",
+        "research": "📊 Research",
+        "market_move": "📈 Market",
+        "opinion": "💬 Opinion",
+    }
+
     for i, f in enumerate(findings, 1):
-        score_bar = "+" * int(f.relevance_score * 5)
+        # 1-5 dot scale
+        dots = min(5, max(1, round(f.relevance_score * 5)))
+        dot_indicator = SCORE_EMOJIS.get(dots, "⚪") * dots
+        cat_label = CATEGORY_LABELS.get(f.category, f.category or "general")
+
         evidence_links = ""
         if f.evidence_items:
             links = [f"<{ev.url}|source>" for ev in f.evidence_items[:2]]
             evidence_links = " | ".join(links)
+
+        # Truncate summary at word boundary
+        summary = f.summary
+        if len(summary) > 200:
+            summary = summary[:200].rsplit(" ", 1)[0] + "…"
 
         blocks.append({
             "type": "section",
@@ -261,8 +287,8 @@ def _build_digest_blocks(findings: list[Finding], entities: list[str]) -> list[d
                 "type": "mrkdwn",
                 "text": (
                     f"*{i}. {f.title}*\n"
-                    f"_{f.summary[:200]}_\n"
-                    f"Relevance: [{score_bar}] | {f.category or 'general'}"
+                    f"_{summary}_\n"
+                    f"{dot_indicator} {cat_label}"
                     + (f" | {evidence_links}" if evidence_links else "")
                 ),
             },
@@ -275,7 +301,7 @@ def _build_digest_blocks(findings: list[Finding], entities: list[str]) -> list[d
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*Entities on the Radar:* {', '.join(entities)}",
+                    "text": f"*Topics on the Radar:* {', '.join(entities)}",
                 },
             },
         ])
