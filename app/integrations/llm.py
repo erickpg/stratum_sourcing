@@ -1,8 +1,8 @@
 """LLM client abstraction with four provider tiers.
 
-Priority order:
-1. Codex Responses API (ChatGPT Pro OAuth via minter -- streaming)
-2. OpenClaw gateway (production on Railway -- WebSocket RPC)
+Priority order (matches ncf-dataroom production pattern):
+1. OpenClaw gateway (production on Railway -- WebSocket RPC, handles Codex OAuth internally)
+2. Codex Responses API (local dev fallback -- direct streaming via OAuth minter)
 3. Anthropic API (direct, if ANTHROPIC_API_KEY set)
 4. OpenAI API (direct, if OPENAI_API_KEY set)
 """
@@ -33,19 +33,19 @@ async def call_llm(
     """Route LLM call to the best available provider."""
     model = model or settings.llm_model
 
-    # 1. Codex Responses API (ChatGPT Pro via OAuth minter)
-    if settings.oauth_minter_url and settings.oauth_minter_key:
-        try:
-            return await _call_codex(prompt, system, max_tokens, temperature, model)
-        except Exception as e:
-            logger.warning("codex_unavailable", error=str(e))
-
-    # 2. OpenClaw gateway (production path)
+    # 1. OpenClaw gateway (production path -- same as ncf-dataroom)
     if settings.openclaw_gateway_url or settings.openclaw_internal_port:
         try:
             return await _call_openclaw(prompt, system, max_tokens, temperature, model)
         except Exception as e:
             logger.warning("openclaw_unavailable", error=str(e))
+
+    # 2. Codex Responses API (local dev fallback -- direct streaming via OAuth minter)
+    if settings.oauth_minter_url and settings.oauth_minter_key:
+        try:
+            return await _call_codex(prompt, system, max_tokens, temperature, model)
+        except Exception as e:
+            logger.warning("codex_unavailable", error=str(e))
 
     # 3. Anthropic API (direct)
     if settings.anthropic_api_key:
