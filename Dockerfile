@@ -28,12 +28,11 @@ RUN cd src && npm install --production 2>/dev/null || true
 # Copy application code
 COPY . .
 
-# Create non-root user
+# Create app user and pre-create local paths. Railway volumes mount as root-owned,
+# so startup must retain root privileges to initialize /data on first boot.
 RUN useradd -m -s /bin/bash appuser && \
     mkdir -p /data/browser /data/cache /data/logs && \
     chown -R appuser:appuser /data /app
-
-USER appuser
 
 EXPOSE 8080 8081
 
