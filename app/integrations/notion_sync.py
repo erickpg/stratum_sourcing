@@ -1,6 +1,12 @@
-"""Notion integration: sync findings to the Ocean database."""
+"""Notion integration: sync findings to the Ocean database.
+
+Two-way sync:
+- Push: create Notion pages for new findings (unsynced, non-dismissed)
+- Pull: read status changes from Notion back into DB (only recent, non-terminal findings)
+"""
 
 import hashlib
+from datetime import datetime, timedelta, timezone
 
 import structlog
 from notion_client import AsyncClient
@@ -45,10 +51,10 @@ async def sync_findings_to_notion() -> int:
     synced = 0
 
     async with async_session_factory() as db:
-        # Get findings not yet synced to Notion
+        # Get findings not yet synced to Notion (with source for name)
         stmt = (
             select(Finding)
-            .options(selectinload(Finding.evidence_items))
+            .options(selectinload(Finding.evidence_items), selectinload(Finding.source))
             .where(Finding.notion_page_id.is_(None), Finding.status != "dismissed")
             .order_by(Finding.relevance_score.desc())
             .limit(50)
@@ -100,6 +106,9 @@ async def _create_notion_page(notion: AsyncClient, finding: Finding) -> str:
             "rich_text": [{"text": {"content": finding.summary[:2000]}}]
         },
         "Stratum DB ID": {"number": finding.id},
+        "Source": {
+            "rich_text": [{"text": {"content": finding.source.name if finding.source else "Unknown"}}]
+        },
     }
 
     # Add verticals as multi-select
@@ -179,8 +188,16 @@ async def pull_status_updates() -> int:
     updated = 0
 
     async with async_session_factory() as db:
-        # Get findings with Notion page IDs
-        stmt = select(Finding).where(Finding.notion_page_id.isnot(None))
+        # Only check recent, non-terminal findings (skip archived/dismissed older than 30 days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        stmt = (
+            select(Finding)
+            .where(
+                Finding.notion_page_id.isnot(None),
+                Finding.status.notin_(["archived", "dismissed"]),
+                Finding.created_at >= cutoff,
+            )
+        )
         result = await db.execute(stmt)
         findings = result.scalars().all()
 

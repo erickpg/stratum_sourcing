@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import async_session_factory
 from app.models import ScanRun, Snapshot, Source
 from app.pipeline.analyzer import analyze_diff
-from app.pipeline.deduplicator import is_duplicate
+from app.pipeline.deduplicator import clear_embedding_cache, is_duplicate, is_semantic_duplicate
 from app.pipeline.differ import compute_diff
 from app.pipeline.scorer import score_finding
 from app.pipeline.tracker import PipelineTracker, ScanStage
@@ -80,8 +80,9 @@ async def run_scan() -> int:
         return_exceptions=True,
     )
 
-    # Clean up fetcher resources
+    # Clean up resources
     await close_all_fetchers()
+    clear_embedding_cache()
 
     # Update scan run with results
     async with async_session_factory() as db:
@@ -185,8 +186,15 @@ async def _scan_single_source(source: Source, run_id: int) -> int:
             # Score (applies vertical alignment, geographic, stage, authority weights)
             scored = score_finding(raw, source)
 
-            # Dedup (idempotency via dedup_hash)
+            # Dedup layer 1: exact hash (same title + source + date)
             if await is_duplicate(db, scored["dedup_hash"]):
+                dupes += 1
+                continue
+
+            # Dedup layer 2: semantic similarity (same news from different sources)
+            if await is_semantic_duplicate(
+                db, scored["title"], scored["summary"], source.id
+            ):
                 dupes += 1
                 continue
 
