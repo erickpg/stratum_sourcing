@@ -97,15 +97,13 @@ async def _create_notion_page(notion: AsyncClient, finding: Finding) -> str:
     """Create a Notion page for a finding in the Ocean database."""
     # Build properties
     properties = {
-        "Title": {"title": [{"text": {"content": finding.title[:100]}}]},
+        "title": {"title": [{"text": {"content": finding.title[:100]}}]},
         "Status": {"select": {"name": finding.status.capitalize()}},
-        "Relevance Score": {"number": round(finding.relevance_score, 2)},
+        "Score": {"number": round(finding.relevance_score, 2)},
         "Category": {"select": {"name": finding.category or "general"}},
-        "Date Found": {"date": {"start": finding.created_at.isoformat()}},
         "Summary": {
             "rich_text": [{"text": {"content": finding.summary[:2000]}}]
         },
-        "Stratum DB ID": {"number": finding.id},
         "Source": {
             "rich_text": [{"text": {"content": finding.source.name if finding.source else "Unknown"}}]
         },
@@ -119,7 +117,7 @@ async def _create_notion_page(notion: AsyncClient, finding: Finding) -> str:
 
     # Add primary evidence URL
     if finding.evidence_items:
-        properties["Evidence"] = {"url": finding.evidence_items[0].url}
+        properties["Evidence URL"] = {"url": finding.evidence_items[0].url}
 
     # Build page body with evidence details
     children = [
