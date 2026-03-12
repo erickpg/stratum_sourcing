@@ -18,11 +18,8 @@ WORKDIR /app
 
 # Python dependencies (deps-only layer for Docker cache)
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir $(python -c "
-import tomllib, pathlib
-d = tomllib.loads(pathlib.Path('pyproject.toml').read_text())
-print(' '.join(d['project']['dependencies']))
-") && playwright install chromium
+RUN pip install --no-cache-dir $(python -c "import tomllib, pathlib; d = tomllib.loads(pathlib.Path('pyproject.toml').read_text()); print(' '.join(d['project']['dependencies']))") \
+    && playwright install chromium
 
 # Node dependencies (OpenClaw gateway wrapper)
 COPY src/package.json src/
