@@ -3,6 +3,32 @@ set -e
 
 echo "=== Stratum Sourcing Monitor - Starting ==="
 
+# --- Cron task mode: run a single task and exit ---
+# Set TASK_MODE env var on Railway cron services to skip the web server.
+if [ -n "${TASK_MODE:-}" ]; then
+    echo "--- Task mode: $TASK_MODE ---"
+    python -m alembic upgrade head
+    case "$TASK_MODE" in
+        nightly-scan)
+            python -m app.tasks.nightly_scan
+            ;;
+        morning-digest)
+            python -m app.tasks.morning_digest
+            ;;
+        notion-export)
+            python -m app.tasks.notion_export
+            ;;
+        *)
+            echo "Unknown TASK_MODE: $TASK_MODE"
+            exit 1
+            ;;
+    esac
+    echo "--- Task $TASK_MODE complete ---"
+    exit 0
+fi
+
+# --- Web server mode (default) ---
+
 # Ensure persistent volume directories exist
 mkdir -p "${DATA_DIR:-/data}/browser/profile"
 mkdir -p "${DATA_DIR:-/data}/cache"
