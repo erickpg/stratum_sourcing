@@ -136,3 +136,21 @@ async def trigger_notion_sync(
 
     asyncio.create_task(run_notion_sync())
     return TaskTriggerResponse(status="accepted", message="Notion sync started")
+
+
+@router.post("/admin/reset-findings")
+async def reset_findings(
+    _secret: str = Depends(verify_cron_secret),
+    db: AsyncSession = Depends(get_session),
+):
+    """Clear all findings, evidence, notifications, snapshots, and scan runs."""
+    from sqlalchemy import text
+
+    await db.execute(text("DELETE FROM notifications"))
+    await db.execute(text("DELETE FROM evidence"))
+    await db.execute(text("DELETE FROM findings"))
+    await db.execute(text("DELETE FROM snapshots"))
+    await db.execute(text("DELETE FROM scan_runs"))
+    await db.commit()
+    logger.info("admin_reset_findings")
+    return {"status": "ok", "message": "All findings, snapshots, and scan runs cleared"}
